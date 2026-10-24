@@ -2,7 +2,10 @@
 
 Jogo de luta 1 contra 1 com os 12 bottons, feito no **Godot 4.7** no modo **Compatibility** (roda em vídeo integrado, como o do Lenovo G40-80).
 
-## Como jogar
+## Jogar sem o Godot (Windows)
+Na página do repositório, abra **Releases** (lado direito), baixe **BottonArena_v0.2_Windows.zip**, descompacte e dê dois cliques em **BOTTON ARENA.exe**. Se o Windows avisar "O Windows protegeu o computador", clique em **Mais informações** e depois em **Executar assim mesmo**.
+
+## Como abrir no Godot
 1. Baixe o Godot 4.7 (versão padrão, não a .NET) em https://godotengine.org/download e descompacte.
 2. No GitHub, clique em **Code > Download ZIP** e descompacte (ou importe o zip direto no Godot).
 3. Abra o Godot, clique em **Importar**, escolha o `project.godot` e depois **Importar e Editar**.
@@ -75,3 +78,6 @@ Santuário dos Núcleos, Cratera Ardente, Floresta Ancestral, Pico Congelado, Co
 - `godot --headless -- --mechtest`: testa combos, defesa, perfeito, sobrecarga e o especial e o supremo de cada botton.
 - `godot --headless -- --autotest --fights=6`: CPU contra CPU em lutas aleatórias, Arcade e Treino.
 - `godot -- --shots --shots=PASTA`: tira prints de todas as telas, arenas e golpes.
+
+## Gerar o .exe
+No Godot: **Projeto > Exportar > Windows Desktop > Exportar Projeto** (o modelo de exportação do Godot precisa estar instalado; o próprio Godot oferece baixar).

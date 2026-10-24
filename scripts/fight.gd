@@ -31,6 +31,7 @@ var menu_title := ""
 var menu_opts: Array = []
 var menu_sel := 0
 var menu_kind := ""
+var menu_t := 0
 var cutin := {}              # câmera do supremo: {"f": lutador, "t": quadros}
 var treino_info := {"hits": 0, "dano": 0.0, "max_hits": 0, "max_dano": 0.0}
 var _win_index := -1
@@ -141,9 +142,12 @@ func _physics_process(_dt: float) -> void:
 	# câmera do supremo: congela o adversário (e tudo que voa) durante a preparação
 	var cine := false
 	var dim := 0.0
+	var em_cine := fighters.filter(func(x): return x.in_super_cinematic())
 	for f in fighters:
 		if f.in_super_cinematic():
-			f.opp.frozen = true
+			# dois supremos ao mesmo tempo: ninguém congela (evita travar a luta)
+			if em_cine.size() == 1:
+				f.opp.frozen = true
 			cine = true
 			cam.zoom = cam.zoom.lerp(Vector2.ONE * 1.35, 0.15)
 			var target: Vector2 = f.position + Vector2(0, -120)
@@ -526,6 +530,7 @@ func _open_menu(kind: String) -> void:
 	menu_open = true
 	menu_kind = kind
 	menu_sel = 0
+	menu_t = 0 if kind in ["end", "continue"] else 30
 	match kind:
 		"pause":
 			menu_title = "PAUSA"
@@ -549,6 +554,7 @@ func _open_menu(kind: String) -> void:
 	Game.play("select")
 
 func _menu_input() -> void:
+	menu_t += 1
 	var up := Game.just("up")
 	var dn := Game.just("down")
 	var ok := Game.just("confirm")
@@ -561,7 +567,7 @@ func _menu_input() -> void:
 		if menu_kind == "golpes":
 			_open_menu("pause")
 			return
-	if not ok:
+	if not ok or menu_t < 24:
 		return
 	Game.play("confirm")
 	var opt: String = menu_opts[menu_sel]

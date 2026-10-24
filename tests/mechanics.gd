@@ -83,6 +83,12 @@ func _teste_basico() -> void:
 	_run(14, {0: [[0, "light"]]})
 	_run(6, {0: [[1, "heavy"], [1, "special"]]})
 	check("Explosão de Núcleo escapa do combo", b.state == "burst" or b.nucleo < 15.0)
+	# dois supremos ao mesmo tempo não podem travar a luta
+	_place(300, 900)
+	a.nucleo = 100.0
+	b.nucleo = 100.0
+	_run(320, {0: [[0, "super"], [1, "super"]]})
+	check("dois supremos juntos não travam", not a.in_super() and not b.in_super() and not a.frozen and not b.frozen)
 
 func _teste_personagem(c: int) -> void:
 	var dados: Dictionary = Game.ROSTER[c]

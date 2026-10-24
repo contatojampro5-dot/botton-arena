@@ -806,6 +806,8 @@ func take_hit(atk: Node2D, m: Dictionary, from_dir: int, scaled := true) -> Stri
 	var kb: Vector2 = m.kb
 	if not on_ground or kb.y < 0:
 		juggle += 1
+	if hp <= 0.0 and Game.modo == "treino":
+		hp = 1.0
 	if hp <= 0.0:
 		vel = Vector2(from_dir * 520.0, -700.0)
 		on_ground = false
