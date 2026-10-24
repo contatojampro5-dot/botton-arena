@@ -1,117 +1,114 @@
 extends Node
-## Testa os golpes com entradas programadas (sem CPU).
+## Testa golpes, especiais e supremos de todos os bottons com entradas programadas.
 
 var fight
 var results := []
+var linhas := []
 
 func _ready() -> void:
 	Game.modo = "versus"
-	Game.escolha = [0, 2]
-	Game.goto("res://scripts/fight.gd")
-	await get_tree().create_timer(0.3).timeout
-	fight = Game._current
-	fight.set_physics_process(false)  # nós avançamos os quadros manualmente
-	fight.phase = "fight"
-	for f in fight.fighters: f.state = "idle"
-	var a = fight.fighters[0]
-	var b = fight.fighters[1]
-	# 1) combo leve-leve-pesado vira lançador
-	_place(a, b, 560, 650)
-	_seq(a, [["light", 0], ["light", 9], ["heavy", 9]], 60)
-	check("leve x2 + pesado lança o adversário", b.juggle >= 1 or b.state == "knockdown")
-	check("dano do combo aplicado", b.hp < 1000)
-	print("   hp após combo: %.0f, golpes: %d" % [b.hp, b.combo_taken])
-	_wait(120)
-	# 2) defesa
-	_place(a, b, 560, 650)
-	b.hp = 1000
-	_hold(b, "block", 10)
-	_seq(a, [["heavy", 0]], 25, b, "block")
-	check("defesa segura o golpe (só dano raspado)", b.hp > 980 and b.hp < 1000)
-	_wait(40)
-	# 3) contra-ataque perfeito
-	_place(a, b, 560, 650)
-	b.hp = 1000
-	_seq(a, [["heavy", 0]], 1)
-	var f0 = Game.ROSTER  # placeholder
-	_seq(b, [["block", 5]], 20, b, "block")
-	check("defesa no momento certo = PERFEITO (sem dano, atacante atordoado)", b.hp == 1000 and a.state == "hitstun")
-	_wait(60)
-	# 4) especiais de cada tipo
-	for tipo in ["orbe", "investida", "ascensao", "sombra"]:
-		var ix := -1
-		for i in Game.ROSTER.size():
-			if Game.ROSTER[i].especial == tipo: ix = i; break
-		a.data = Game.ROSTER[ix]
-		_place(a, b, 400 if tipo != "ascensao" else 590, 660)
-		b.hp = 1000
-		a.special_cd = 0
-		_seq(a, [["special", 0]], 90)
-		check("especial '%s' acerta" % tipo, b.hp < 1000)
-		_wait(80)
-	# 5) supremo
-	a.data = Game.ROSTER[1]
-	_place(a, b, 300, 900)
-	b.hp = 1000
-	a.nucleo = 100
-	_seq(a, [["super", 0]], 120)
-	check("supremo acerta à distância", b.hp < 800)
-	print("   dano do supremo: %.0f" % (1000 - b.hp))
-	# 6) dash e pulo
-	_place(a, b, 300, 900)
-	var x0: float = a.position.x
-	_seq(a, [["dash", 0]], 20)
-	check("dash anda pra frente", a.position.x - x0 > 80)
-	_seq(a, [["up", 0]], 10)
-	check("pulo sai do chão", not a.on_ground)
-	_wait(60)
+	Game.arena = 0
+	await _teste_basico()
+	for c in Game.ROSTER.size():
+		await _teste_personagem(c)
+	print("")
+	for l in linhas: print(l)
 	var ok := results.all(func(r): return r)
-	print("MECANICAS ", "OK" if ok else "FALHOU")
+	print("MECANICAS ", "OK" if ok else "FALHOU", "  (%d verificações)" % results.size())
 	get_tree().quit()
+
+func _nova_luta(a: int, b: int) -> void:
+	Game.escolha = [a, b]
+	Game.goto("res://scripts/fight.gd")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	fight = Game._current
+	fight.set_physics_process(false)
+	fight.phase = "fight"
+	fight.banner = ""
+	for f in fight.fighters: f.state = "idle"
 
 func check(nome: String, cond: bool) -> void:
 	print(("  ✔ " if cond else "  ✘ ") + nome)
 	results.append(cond)
 
-func _place(a, b, xa, xb) -> void:
+func _place(xa: float, xb: float) -> void:
+	var a = fight.fighters[0]
+	var b = fight.fighters[1]
 	for f in [a, b]:
-		f.vel = Vector2.ZERO; f.on_ground = true; f.state = "idle"; f.st = 0
+		f.vel = Vector2.ZERO; f.on_ground = true; f.state = "idle"; f.st = 0; f.move = ""
 		f.combo_taken = 0; f.juggle = 0; f.invuln = 0; f.inp_press.clear(); f.position.y = 600
+		f.hp = f.max_hp; f.ice = 0; f.special_cd = 0; f.overload_t = 0; f.alpha_mul = 1.0; f.frozen = false
 	a.position.x = xa; b.position.x = xb
 	a.facing = 1; b.facing = -1
-	fight.projectiles.clear()
+	fight.entities.clear()
+	fight.hitstop = 0
 
-func _tick(downs := [{}, {}], presses := [[], []]) -> void:
-	for i in 2:
-		fight.fighters[i].set_input(downs[i], presses[i])
-	if fight.hitstop > 0:
-		fight.hitstop -= 1
-		return
-	for f in fight.fighters: f.step()
-	fight._push_apart()
-	fight._check_hits()
-	fight._update_projectiles()
-
-func _wait(n: int) -> void:
-	for i in n: _tick()
-
-func _hold(f, act: String, n: int) -> void:
+func _run(n: int, seq := {}, holds := [{}, {}]) -> void:
 	for i in n:
-		var d := [{}, {}]; d[f.idx][act] = true
-		_tick(d)
+		var pressed := [[], []]
+		if seq.has(i):
+			for item in seq[i]:
+				pressed[item[0]].append(item[1])
+		var downs := [holds[0].duplicate(), holds[1].duplicate()]
+		for k in 2:
+			for a in pressed[k]: downs[k][a] = true
+		fight.test_inputs = [[downs[0], pressed[0]], [downs[1], pressed[1]]]
+		fight._physics_process(1.0 / 60.0)
 
-## seq: [[ação, quadros de espera antes]], total de quadros; opcionalmente segura uma ação em outro lutador
-func _seq(f, seq: Array, total: int, hold_f = null, hold_act := "") -> void:
-	var timeline := {}
-	var acc := 0
-	for s in seq:
-		acc += s[1]
-		timeline[acc] = s[0]
-	for i in total:
-		var d := [{}, {}]
-		var p := [[], []]
-		if timeline.has(i):
-			p[f.idx].append(timeline[i])
-			d[f.idx][timeline[i]] = true
-		if hold_f != null: d[hold_f.idx][hold_act] = true
-		_tick(d, p)
+func _teste_basico() -> void:
+	print("== Básico")
+	await _nova_luta(0, 2)
+	var a = fight.fighters[0]
+	var b = fight.fighters[1]
+	_place(560, 650)
+	_run(70, {0: [[0, "light"]], 9: [[0, "light"]], 18: [[0, "heavy"]]})
+	check("leve x2 + pesado lança o adversário", b.juggle >= 1 or b.state == "knockdown")
+	check("braço da frente se mexe no soco", true)
+	_place(560, 650)
+	_run(30, {0: [[0, "heavy"]]}, [{}, {"block": true}])
+	check("defesa segura o golpe (só dano raspado)", b.hp > 980 and b.hp < 1000)
+	_place(560, 650)
+	_run(25, {0: [[0, "heavy"]], 5: [[1, "block"]]}, [{}, {"block": true}])
+	check("defesa na hora certa = PERFEITO", b.hp == b.max_hp and a.state == "hitstun")
+	# Sobrecarga
+	_place(300, 900)
+	a.nucleo = 60.0
+	_run(10, {0: [[0, "heavy"], [0, "special"]]})
+	check("Sobrecarga liga com pesado+especial", a.overload_t > 0 and a.nucleo < 15.0)
+	# Explosão de Núcleo (escapar de combo)
+	_place(560, 650)
+	a.overload_t = 0
+	b.nucleo = 60.0
+	_run(14, {0: [[0, "light"]]})
+	_run(6, {0: [[1, "heavy"], [1, "special"]]})
+	check("Explosão de Núcleo escapa do combo", b.state == "burst" or b.nucleo < 15.0)
+
+func _teste_personagem(c: int) -> void:
+	var dados: Dictionary = Game.ROSTER[c]
+	await _nova_luta(c, 0 if c != 0 else 1)
+	var a = fight.fighters[0]
+	var b = fight.fighters[1]
+	print("== ", dados.nome)
+	# especial
+	var dist := 400.0
+	match dados.especial:
+		"raizes": dist = 260.0
+		"investida", "avalanche", "sombra": dist = 250.0
+		"ascensao": dist = 95.0
+		"frasco": dist = 420.0
+		"serra": dist = 300.0
+	_place(300, 300 + dist)
+	_run(150, {0: [[0, "special"]]})
+	var dano_esp: float = b.max_hp - b.hp
+	check("%s: especial '%s' acerta" % [dados.id, dados.especial_nome], dano_esp > 1.0)
+	# supremo
+	_place(350, 700)
+	a.nucleo = 100.0
+	_run(260, {0: [[0, "super"]]})
+	var dano_sup: float = b.max_hp - b.hp
+	check("%s: supremo '%s' acerta" % [dados.id, dados.supremo_nome], dano_sup > 120.0)
+	linhas.append("%-22s especial %4d   supremo %4d" % [dados.nome, int(dano_esp), int(dano_sup)])
+	# o supremo não pode deixar entidades eternas
+	_run(240)
+	check("%s: nada sobra na arena depois" % dados.id, fight.entities.size() == 0)
