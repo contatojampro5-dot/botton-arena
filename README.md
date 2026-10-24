@@ -17,6 +17,7 @@ Baixe o jogo pronto por este link: https://github.com/contatojampro5-dot/botton-
 - **2 Jogadores**: dois jogadores no mesmo teclado ou com controles.
 - **Contra CPU**: escolha seu botton e o da CPU.
 - **Treino**: boneco que fica parado, defende, pula ou luta como CPU; vida que se recupera, Núcleo infinito e contador de combo com recorde.
+- **Galeria**: as fichas originais de cada botton, com especial, supremo e atributos.
 - **Opções**: volume da música e dos efeitos, dificuldade da CPU (fácil, normal, difícil), tempo do round (60, 99 ou infinito), rounds (1, melhor de 3 ou de 5) e tela cheia. Tudo fica salvo.
 
 ## Controles
@@ -79,6 +80,7 @@ Santuário dos Núcleos, Cratera Ardente, Floresta Ancestral, Pico Congelado, Co
 - `godot --headless -- --mechtest`: testa combos, defesa, perfeito, sobrecarga e o especial e o supremo de cada botton.
 - `godot --headless -- --autotest --fights=6`: CPU contra CPU em lutas aleatórias, Arcade e Treino.
 - `godot -- --shots --shots=PASTA`: tira prints de todas as telas, arenas e golpes.
+- `godot -- --film --shots=PASTA`: filma uma luta CPU contra CPU (um print a cada 2 segundos).
 
 ## Gerar o .exe
 No Godot: **Projeto > Exportar > Windows Desktop > Exportar Projeto** (o modelo de exportação do Godot precisa estar instalado; o próprio Godot oferece baixar).

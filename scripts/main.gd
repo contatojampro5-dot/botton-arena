@@ -1,6 +1,9 @@
 extends Node
 
 func _ready() -> void:
+	if "--film" in OS.get_cmdline_user_args():
+		add_child(load("res://tests/film.gd").new())
+		return
 	if "--perf" in OS.get_cmdline_user_args():
 		add_child(load("res://tests/perf.gd").new())
 		return
