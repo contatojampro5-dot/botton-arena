@@ -161,6 +161,9 @@ func _draw() -> void:
 
 # ===================================================================== camada de brilho (luz somada)
 func _draw_add(ci: CanvasItem) -> void:
+	# um pontinho invisível desde o começo: o computador prepara o "brilho somado" logo na entrada da luta,
+	# em vez de travar um instante no primeiro golpe
+	ci.draw_texture_rect(Game.dot_tex, Rect2(640, 360, 2, 2), false, Color(0, 0, 0, 0.004))
 	if fight:
 		for e in fight.entities:
 			_ent_glow(ci, e)
