@@ -21,22 +21,8 @@ const MOVES := {
 	"launcher":  {"startup": 8,  "active": 4,  "recovery": 18, "dmg": 70.0,  "hitstun": 30, "blockstun": 14, "kb": Vector2(120, -980), "box": Rect2(10, -175, 95, 165),  "sfx": "hit_heavy", "lunge": 18.0, "gain": 10.0},
 	"air_light": {"startup": 4,  "active": 4,  "recovery": 8,  "dmg": 40.0,  "hitstun": 16, "blockstun": 9,  "kb": Vector2(140, -380), "box": Rect2(0, -115, 95, 115),   "sfx": "hit_light", "lunge": 10.0, "gain": 6.0},
 	"air_heavy": {"startup": 8,  "active": 4,  "recovery": 14, "dmg": 75.0,  "hitstun": 24, "blockstun": 12, "kb": Vector2(320, 520),  "box": Rect2(0, -95, 105, 125),   "sfx": "hit_heavy", "lunge": 16.0, "gain": 10.0, "spike": true},
-	# especiais com golpe do próprio corpo
-	"investida": {"startup": 8,  "active": 16, "recovery": 16, "dmg": 95.0,  "hitstun": 24, "blockstun": 16, "kb": Vector2(460, -260), "box": Rect2(10, -150, 95, 140),  "sfx": "hit_heavy", "lunge": 0.0, "gain": 11.0, "cd": 40},
-	"sombra":    {"startup": 12, "active": 4,  "recovery": 14, "dmg": 85.0,  "hitstun": 22, "blockstun": 14, "kb": Vector2(320, -200), "box": Rect2(10, -150, 105, 130), "sfx": "hit_heavy", "lunge": 20.0, "gain": 10.0, "cd": 50},
-	"ascensao":  {"startup": 5,  "active": 14, "recovery": 18, "dmg": 100.0, "hitstun": 28, "blockstun": 16, "kb": Vector2(90, -900),  "box": Rect2(-10, -225, 110, 225), "sfx": "hit_heavy", "lunge": 0.0, "gain": 11.0, "cd": 40},
-	"avalanche": {"startup": 10, "active": 18, "recovery": 20, "dmg": 110.0, "hitstun": 26, "blockstun": 18, "kb": Vector2(520, -300), "box": Rect2(10, -160, 100, 160), "sfx": "hit_heavy", "lunge": 0.0, "gain": 12.0, "cd": 60},
-	"portal":    {"startup": 14, "active": 40, "recovery": 16, "dmg": 90.0,  "hitstun": 24, "blockstun": 16, "kb": Vector2(240, -380), "box": Rect2(-58, -175, 116, 185), "sfx": "hit_heavy", "lunge": 0.0, "gain": 10.0, "cd": 60},
-	# especiais que soltam algo (o dano fica no que é solto, ver _spawn_special)
-	"orbe":      {"startup": 13, "active": 1, "recovery": 20, "box": Rect2(), "cd": 40},
-	"raizes":    {"startup": 10, "active": 1, "recovery": 28, "box": Rect2(), "cd": 55},
-	"tornado":   {"startup": 12, "active": 1, "recovery": 22, "box": Rect2(), "cd": 70},
-	"onda":      {"startup": 12, "active": 1, "recovery": 20, "box": Rect2(), "cd": 45},
-	"lanca":     {"startup": 11, "active": 1, "recovery": 22, "box": Rect2(), "cd": 45},
-	"serra":     {"startup": 12, "active": 1, "recovery": 18, "box": Rect2(), "cd": 90},
-	"frasco":    {"startup": 14, "active": 1, "recovery": 20, "box": Rect2(), "cd": 80},
 }
-const ENTITY_SPECIALS := ["orbe", "raizes", "tornado", "onda", "lanca", "serra", "frasco"]
+const Powers := preload("res://scripts/powers.gd")
 # quanto tempo cada supremo mantém o lutador ocupado depois da câmera
 const SUPER_DUR := {"raio": 44, "erupcao": 56, "ilusao": 62, "furia": 66, "ciclone": 34, "tsunami": 34,
 	"era_glacial": 82, "julgamento": 74, "terremoto": 60, "canhao": 48, "meteoros": 56, "transmutacao": 70}
@@ -60,7 +46,11 @@ var hits_done := 0
 var chain := 0
 var air_jumps := 0
 var air_dash := true
-var special_cd := 0
+var cds := [0, 0, 0, 0]         # recarga de cada poder (neutro, frente, cima, baixo)
+var slot := -1                  # poder em uso
+var slow_t := 0                 # lento (Poço Sombrio)
+var ultimo_efetivo := -99
+var efetivo := false             # o último golpe recebido foi super efetivo
 var combo_taken := 0            # golpes seguidos recebidos (para escalonar dano e limitar combo)
 var combo_dmg := 0.0            # dano do combo atual (modo Treino)
 var juggle := 0
@@ -193,7 +183,9 @@ func reset_round() -> void:
 	combo_dmg = 0.0
 	juggle = 0
 	invuln = 0
-	special_cd = 0
+	cds = [0, 0, 0, 0]
+	slot = -1
+	slow_t = 0
 	frozen = false
 	ice = 0
 	poison_t = 0
@@ -202,6 +194,7 @@ func reset_round() -> void:
 	alpha_mul = 1.0
 	move = ""
 	fist_trail.clear()
+	reset_physics_interpolation()
 
 # ---------------------------------------------------------------- entrada
 func set_input(down: Dictionary, pressed: Array) -> void:
@@ -258,7 +251,18 @@ func in_super_cinematic() -> bool:
 func current_move() -> Dictionary:
 	if move == "supremo":
 		return {"startup": SUPER_STARTUP, "active": SUPER_DUR.get(data.supremo, 50), "recovery": 14, "box": Rect2()}
-	return MOVES.get(move, {})
+	if MOVES.has(move):
+		return MOVES[move]
+	return Powers.get_def(move)
+
+## tipo de poder "do corpo" do golpe atual ("rush", "rise", "tp", "portal" ou "")
+func self_tipo() -> String:
+	if move == "" or MOVES.has(move) or move == "supremo":
+		return ""
+	return Powers.get_def(move).get("self", "")
+
+func is_power() -> bool:
+	return move != "" and not MOVES.has(move) and move != "supremo"
 
 func step() -> void:
 	frame += 1
@@ -270,10 +274,15 @@ func step() -> void:
 		_animate()
 		return
 	st += 1
-	if special_cd > 0: special_cd -= 1
+	for k in 4:
+		if cds[k] > 0: cds[k] -= 1
+	if slow_t > 0: slow_t -= 1
 	if invuln > 0: invuln -= 1
 	if ice > 0: ice -= 1
-	if poison_t > 0: poison_t -= 1
+	if poison_t > 0:
+		poison_t -= 1
+		if poison_t % 12 == 0 and state != "ko" and hp > 1.0:
+			hp = maxf(1.0, hp - 3.0)
 	if overload_t > 0:
 		overload_t -= 1
 		if overload_t == 0 and fight:
@@ -281,10 +290,11 @@ func step() -> void:
 	flash = max(0.0, flash - 0.12)
 	shake = max(0.0, shake - 0.6)
 	hp_shown = move_toward(hp_shown, hp, 6.0) if state != "hitstun" else hp_shown
-	alpha_mul = move_toward(alpha_mul, 1.0, 0.1) if not (state == "attack" and move in ["sombra", "portal", "supremo"]) else alpha_mul
+	alpha_mul = move_toward(alpha_mul, 1.0, 0.1) if not (state == "attack" and (self_tipo() in ["tp", "portal"] or move == "supremo")) else alpha_mul
 	match state:
 		"idle", "walk": _ground_neutral()
 		"jump": _air_neutral()
+		"prejump": _prejump()
 		"dash": _dash()
 		"block": _block()
 		"blockstun":
@@ -318,9 +328,7 @@ func _try_actions() -> bool:
 		nucleo = 0.0
 		_start_move("supremo")
 		return true
-	if _pressed("special") and special_cd <= 0:
-		_consume("special")
-		_start_move(data.especial)
+	if _pressed("special") and _try_power():
 		return true
 	if _pressed("heavy"):
 		_consume("heavy")
@@ -349,12 +357,47 @@ func _ground_neutral() -> void:
 	if _try_actions(): return
 	if _pressed("up"):
 		_consume("up")
-		_jump()
+		_go("prejump")
+		vel.x = 0.0
 		return
 	var d := _dir()
-	vel.x = d * walk_speed * (1.12 if overload_t > 0 else 1.0)
+	vel.x = d * walk_speed * (1.12 if overload_t > 0 else 1.0) * (0.5 if slow_t > 0 else 1.0)
 	if d != 0 and state != "walk": _go("walk")
 	elif d == 0 and state != "idle": _go("idle")
+
+## Antes do pulo há 3 quadros: se o especial for apertado nesse tempo, sai o poder "cima" (↑ + especial).
+func _prejump() -> void:
+	if _pressed("special") and _try_power(2):
+		return
+	if st >= 3:
+		_jump()
+
+## Escolhe o poder pela direção segurada. forcar_slot >= 0 força um poder.
+func _try_power(forcar_slot := -1) -> bool:
+	var sl := forcar_slot
+	if sl < 0:
+		if _held("up"):
+			sl = 2
+		elif _held("down"):
+			sl = 3
+		elif _dir() != 0 and _dir() == _frente():
+			sl = 1
+		else:
+			sl = 0
+	if cds[sl] > 0:
+		if fight and forcar_slot < 0 and st % 6 == 0:
+			pass
+		return false
+	_consume("special")
+	slot = sl
+	_start_move(data.poderes[sl])
+	return true
+
+## direção "para frente" (para o rival)
+func _frente() -> int:
+	if opp == null:
+		return facing
+	return 1 if opp.position.x >= position.x else -1
 
 func _jump() -> void:
 	vel.y = JUMP_V
@@ -442,14 +485,21 @@ func _start_move(m: String) -> void:
 		invuln = SUPER_STARTUP + 2
 		Game.play("super")
 		if fight: fight.on_super_start(self)
-	elif MOVES.has(m) and MOVES[m].has("cd"):
-		special_cd = int(MOVES[m].cd * (0.5 if overload_t > 0 else 1.0))
+	elif is_power():
+		var pd := Powers.get_def(m)
+		var sl: int = data.poderes.find(m)
+		slot = sl
+		if sl >= 0:
+			cds[sl] = int(pd.get("cd", 60) * (0.5 if overload_t > 0 else 1.0))
 		_face_opp()
-		if m != "portal" and m != "sombra": Game.play("special", randf_range(0.95, 1.05))
-		if m == "avalanche": armor = true
-		if m in ["sombra", "portal"]:
-			Game.play("shadow" if m == "sombra" else "portal")
+		var st_tipo: String = pd.get("self", "")
+		if st_tipo != "tp" and st_tipo != "portal":
+			Game.play("special", randf_range(0.95, 1.05), -3)
+		if pd.get("armor", false): armor = true
+		if st_tipo in ["tp", "portal"]:
+			Game.play("shadow" if st_tipo == "tp" else "portal")
 			if fight: fight.fx.portal(position + Vector2(0, -90), data.cor)
+		if fight: fight.fx.charge(self)
 	else:
 		Game.play("whoosh", randf_range(0.9, 1.15), -4)
 
@@ -461,7 +511,6 @@ func _attack() -> void:
 	# Sobrecarga cancelando o começo de um golpe pesado/especial
 	if move_f <= 5 and move != "supremo" and _combo_overload() and nucleo >= 50.0 and overload_t <= 0:
 		_consume("heavy"); _consume("special")
-		special_cd = 0
 		_start_overload()
 		return
 	# cancelamentos: leve -> leve/pesado/especial; pesado -> especial; qualquer acerto -> supremo
@@ -474,33 +523,33 @@ func _attack() -> void:
 				chain += 1
 				_start_move("launcher" if (move == "light" and chain >= 2) else ("air_heavy" if is_airborne() else "heavy"))
 				return
-		if move in ["light", "heavy", "launcher", "air_light", "air_heavy"] and _pressed("special") and special_cd <= 0:
-			_consume("special"); chain = 0; _start_move(data.especial); return
+		if move in ["light", "heavy", "launcher", "air_light", "air_heavy"] and _pressed("special"):
+			chain = 0
+			if _try_power(): return
 		if _pressed("super") and nucleo >= 100.0 and move != "supremo":
 			_consume("super"); nucleo = 0.0; chain = 0; _start_move("supremo"); return
-	match move:
-		"investida":
+	var tipo := self_tipo()
+	match tipo:
+		"rush":
 			if move_f > su and move_f <= su + ac:
-				vel.x = facing * 760.0
-				if fight and move_f % 2 == 0: fight.fx.flame_trail(position + Vector2(-facing * 30, -80), data.cor)
-			else:
-				vel.x = move_toward(vel.x, 0, 50.0)
-		"avalanche":
-			if move_f > su and move_f <= su + ac:
-				vel.x = facing * 620.0
-				if fight and move_f % 3 == 0: fight.fx.debris(position + Vector2(-facing * 20, -10), data.cor2)
+				vel.x = facing * float(m.get("speed", 700.0))
+				if fight:
+					if armor or m.get("armor", false):
+						if move_f % 3 == 0: fight.fx.debris(position + Vector2(-facing * 20, -10), data.cor2)
+					elif move_f % 2 == 0:
+						fight.fx.flame_trail(position + Vector2(-facing * 30, -80), data.cor)
 			else:
 				vel.x = move_toward(vel.x, 0, 50.0)
 				if move_f > su + ac: armor = false
-		"ascensao":
-			if move_f <= 6: invuln = 2
+		"rise":
+			if move_f <= int(m.get("invuln", 6)): invuln = 2
 			if move_f == su + 1:
 				vel = Vector2(facing * 140.0, -980.0)
 				on_ground = false
 				if fight: fight.fx.ring(position + Vector2(0, -60), data.cor, 1.2)
 			if fight and move_f > su and move_f <= su + ac and move_f % 2 == 0:
 				fight.fx.flame_trail(position + Vector2(0, -60), data.cor)
-		"sombra":
+		"tp":
 			alpha_mul = clampf(1.0 - float(move_f) / (su - 2), 0.0, 1.0) if move_f < su - 2 else minf(1.0, alpha_mul + 0.34)
 			if move_f == su - 2 and opp:
 				var side := 1 if position.x < opp.position.x else -1
@@ -512,26 +561,28 @@ func _attack() -> void:
 				position.y = min(position.y, opp.position.y)
 				facing = -side
 				invuln = 4
+				reset_physics_interpolation()
 				if fight: fight.fx.portal(position + Vector2(0, -90), data.cor)
 		"portal":
 			_portal_update(su, ac)
-		"orbe", "raizes", "tornado", "onda", "lanca", "serra", "frasco":
-			if on_ground: vel.x = move_toward(vel.x, 0, 50.0)
-			if move_f == su: _spawn_special(move)
-		"supremo":
-			if on_ground or move_f <= su: vel.x = move_toward(vel.x, 0, 50.0)
-			if move_f <= su:
-				vel.y = 0.0
-			else:
-				_super_frame(move_f - su)
-		"air_light", "air_heavy":
-			pass
 		_:
-			if on_ground: vel.x = move_toward(vel.x, 0, 50.0)
+			match move:
+				"supremo":
+					if on_ground or move_f <= su: vel.x = move_toward(vel.x, 0, 50.0)
+					if move_f <= su:
+						vel.y = 0.0
+					else:
+						_super_frame(move_f - su)
+				"air_light", "air_heavy":
+					pass
+				_:
+					if on_ground: vel.x = move_toward(vel.x, 0, 50.0)
+					if is_power() and move_f == su:
+						Powers.spawn(move, self, fight)
 	var total: int = su + ac + m.recovery
 	if move in ["air_light", "air_heavy"] and on_ground and move_f > su:
 		total = min(total, move_f + 4)
-	if move == "ascensao" and move_f > su + ac and not on_ground:
+	if tipo == "rise" and move_f > su + ac and not on_ground:
 		total = move_f + 1
 	if move_f >= total:
 		chain = 0
@@ -549,6 +600,7 @@ func _portal_update(su: int, ac: int) -> void:
 		on_ground = false
 		vel = Vector2.ZERO
 		invuln = 4
+		reset_physics_interpolation()
 		if fight: fight.fx.portal(position + Vector2(0, -90), data.cor)
 	elif move_f <= su + 5:
 		alpha_mul = minf(1.0, alpha_mul + 0.25)
@@ -565,53 +617,9 @@ func _portal_update(su: int, ac: int) -> void:
 				fight.fx.debris(position, data.cor)
 
 func on_attack_hit() -> void:
-	if move == "portal":
+	if self_tipo() == "portal":
 		_portal_hit = true
 		vel = Vector2(-facing * 180.0, -620.0)
-
-# ---------------------------------------------------------------- especiais que soltam algo
-func _spawn_special(kind: String) -> void:
-	if fight == null: return
-	var d := facing
-	var cor: Color = data.cor
-	match kind:
-		"orbe":
-			fight.spawn({"kind": "orb", "owner": self, "pos": position + Vector2(d * 80, -100), "vel": Vector2(d * 640, 0),
-				"size": Vector2(46, 46), "life": 160, "dmg": 80.0, "kb": Vector2(300, -120), "hitstun": 20, "blockstun": 14,
-				"projectile": true, "destroy_on_hit": true, "dir": d, "cor": cor, "gain": 9.0})
-			Game.play("zap")
-		"raizes":
-			for i in 4:
-				fight.spawn({"kind": "vine", "owner": self, "pos": Vector2(position.x + d * (95 + i * 88), FLOOR_Y), "anchor": "b",
-					"size": Vector2(84, 155), "delay": 4 + i * 6, "life": 14, "dmg": 28.0 if i < 3 else 44.0, "kb": Vector2(100, -560),
-					"hitstun": 26, "blockstun": 10, "dir": d, "cor": cor, "gain": 4.0, "sfx": "hit_light"})
-			Game.play("quake", 1.4, -6)
-		"tornado":
-			fight.spawn({"kind": "tornado", "owner": self, "pos": Vector2(position.x + d * 90, FLOOR_Y), "anchor": "b", "vel": Vector2(d * 360, 0),
-				"size": Vector2(92, 195), "life": 100, "hits": 3, "interval": 8, "dmg": 26.0, "kb": Vector2(60, -420),
-				"kb_last": Vector2(220, -760), "hitstun": 24, "blockstun": 10, "projectile": true, "dir": d, "cor": cor, "gain": 4.0, "sfx": "hit_light"})
-			Game.play("wind")
-		"onda":
-			fight.spawn({"kind": "wave", "owner": self, "pos": Vector2(position.x + d * 80, FLOOR_Y), "anchor": "b", "vel": Vector2(d * 560, 0),
-				"size": Vector2(130, 88), "life": 110, "dmg": 72.0, "kb": Vector2(360, -260), "hitstun": 22, "blockstun": 14,
-				"projectile": true, "destroy_on_hit": true, "dir": d, "cor": cor, "gain": 9.0})
-			Game.play("water")
-		"lanca":
-			fight.spawn({"kind": "ice", "owner": self, "pos": position + Vector2(d * 80, -100), "vel": Vector2(d * 880, 0),
-				"size": Vector2(84, 36), "life": 120, "dmg": 58.0, "freeze": 28, "kb": Vector2(160, 0), "hitstun": 18, "blockstun": 12,
-				"projectile": true, "destroy_on_hit": true, "dir": d, "cor": cor, "gain": 9.0})
-			Game.play("ice")
-		"serra":
-			fight.spawn({"kind": "gear", "owner": self, "pos": position + Vector2(d * 80, -95), "vel": Vector2(d * 950, 0),
-				"accel": Vector2(-d * 1150, 0), "size": Vector2(66, 66), "life": 220, "hits": 2, "interval": 22, "dmg": 42.0,
-				"kb": Vector2(200, -150), "hitstun": 20, "blockstun": 12, "projectile": true, "boomerang": true, "dir": d, "cor": cor,
-				"gain": 6.0, "sfx": "hit_light"})
-			Game.play("gear")
-		"frasco":
-			fight.spawn({"kind": "flask", "owner": self, "pos": position + Vector2(d * 60, -135), "vel": Vector2(d * 470, -640),
-				"grav": 1900.0, "size": Vector2(36, 36), "life": 140, "dmg": 38.0, "kb": Vector2(120, -200), "hitstun": 18, "blockstun": 10,
-				"destroy_on_hit": true, "on_ground": "die", "on_death": "poison", "dir": d, "cor": cor, "gain": 6.0})
-			Game.play("whoosh", 0.8)
 
 # ---------------------------------------------------------------- supremos (k = quadro depois da câmera)
 func _super_frame(k: int) -> void:
@@ -752,10 +760,11 @@ func active_hitbox() -> Rect2:
 	if state != "attack": return Rect2()
 	var m := current_move()
 	if m.is_empty() or not m.has("box") or m.box.size == Vector2.ZERO: return Rect2()
+	if is_power() and m.get("self", "") == "": return Rect2()
 	var su: int = m.startup
 	if move_f <= su or move_f > su + m.active: return Rect2()
 	if hits_done >= 1: return Rect2()
-	if move == "portal" and (move_f <= su + 5 or _portal_hit): return Rect2()
+	if self_tipo() == "portal" and (move_f <= su + 5 or _portal_hit): return Rect2()
 	var b: Rect2 = m.box
 	var x0 := b.position.x if facing == 1 else -b.position.x - b.size.x
 	return Rect2(position + Vector2(x0, b.position.y), b.size)
@@ -770,6 +779,11 @@ func take_hit(atk: Node2D, m: Dictionary, from_dir: int, scaled := true) -> Stri
 	if state == "ko": return ""
 	var is_super: bool = m.get("super", false)
 	var mult: float = atk.dmg_mult * (1.2 if atk.overload_t > 0 else 1.0)
+	efetivo = false
+	var de_poder: bool = m.get("power", false) or (m.get("melee", true) and atk.is_power())
+	if (de_poder or is_super) and Game.super_efetivo(atk.data.tipo, data.tipo):
+		mult *= 1.25
+		efetivo = true
 	var blocking = state in ["block", "blockstun"] and on_ground and not m.get("unblockable", false)
 	if blocking and frame - block_press_f <= 8 and not is_super:
 		# CONTRA-ATAQUE PERFEITO
@@ -802,7 +816,7 @@ func take_hit(atk: Node2D, m: Dictionary, from_dir: int, scaled := true) -> Stri
 	flash = 1.0
 	shake = 6.0
 	armor = false
-	if m.get("poison", false): poison_t = 90
+	if m.get("poison", false): poison_t = 120
 	var kb: Vector2 = m.kb
 	if not on_ground or kb.y < 0:
 		juggle += 1
@@ -877,7 +891,7 @@ func _physics() -> void:
 	if state == "burst" and not on_ground: g = GRAVITY * 0.3
 	if state == "hitstun" and not on_ground: g = GRAVITY * (0.85 if ice <= 0 else 1.1)
 	if in_super_cinematic(): g = 0.0
-	if state == "attack" and move == "portal" and move_f <= MOVES.portal.startup + 5: g = 0.0
+	if state == "attack" and self_tipo() == "portal" and move_f <= int(current_move().get("startup", 14)) + 5: g = 0.0
 	if not on_ground:
 		vel.y += g * dt
 	position += vel * dt
@@ -978,17 +992,31 @@ func _attack_pose() -> Array:
 	var prep: Array = P_SOCO_PREP
 	var hit: Array = P_SOCO
 	var front := false
+	var tipo := self_tipo()
 	match move:
 		"light": prep = P_SOCO_PREP; hit = P_SOCO
-		"heavy", "sombra": prep = P_GANCHO_PREP; hit = P_GANCHO; front = true
-		"launcher", "ascensao": prep = P_UPPER_PREP; hit = P_UPPER
+		"heavy": prep = P_GANCHO_PREP; hit = P_GANCHO; front = true
+		"launcher": prep = P_UPPER_PREP; hit = P_UPPER
 		"air_light": prep = P_SOCO_PREP; hit = P_AR_SOCO
 		"air_heavy": prep = P_MARTELO_PREP; hit = P_MARTELO; front = true
-		"orbe", "tornado", "onda", "lanca", "serra": prep = P_EMPURRA_PREP; hit = P_EMPURRA; front = true
-		"raizes": prep = P_CHAO_PREP; hit = P_CHAO
-		"frasco": prep = P_ARREMESSO_PREP; hit = P_ARREMESSO
-		"investida", "avalanche": prep = P_EMPURRA_PREP; hit = P_INVESTIDA
-		"portal": prep = P_CARGA; hit = P_MARTELO; front = true
+		_:
+			if is_power():
+				match tipo:
+					"rise": prep = P_UPPER_PREP; hit = P_UPPER
+					"rush": prep = P_EMPURRA_PREP; hit = P_INVESTIDA
+					"tp": prep = P_GANCHO_PREP; hit = P_GANCHO; front = true
+					"portal": prep = P_CARGA; hit = P_MARTELO; front = true
+					_:
+						match slot:
+							2: prep = P_CHAO_PREP; hit = P_CEU
+							3: prep = P_CHAO_PREP; hit = P_CHAO
+							_:
+								if move in ["pedra", "frasco", "semente"]:
+									prep = P_ARREMESSO_PREP; hit = P_ARREMESSO
+								elif move in ["clarao", "aneis"]:
+									prep = P_CARGA; hit = P_ABERTO
+								else:
+									prep = P_EMPURRA_PREP; hit = P_EMPURRA; front = true
 		"supremo":
 			if move_f <= su:
 				var tremor := sin(t_anim * 50.0) * 0.08
@@ -1049,9 +1077,10 @@ func _animate() -> void:
 			elif move_f <= su + m.active:
 				rot = 0.18
 				off.x = m.get("lunge", 0.0)
-				if move in ["ascensao", "launcher"]: rot = -0.3
-				if move in ["investida", "avalanche"]: rot = 0.3; sc = Vector2(1.12, 0.92)
-				if move == "portal": rot = 0.5
+				var tp2 := self_tipo()
+				if move == "launcher" or tp2 == "rise": rot = -0.3
+				if tp2 == "rush": rot = 0.3; sc = Vector2(1.12, 0.92)
+				if tp2 == "portal": rot = 0.5
 				if move == "supremo": off.y = -12.0; sc = Vector2.ONE * 1.08; rot = 0.05
 			else:
 				rot = 0.05
