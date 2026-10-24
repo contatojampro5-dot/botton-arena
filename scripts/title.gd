@@ -5,9 +5,9 @@ var bg: Node2D
 var t := 0.0
 var etapa := 0           # 0 = aperte iniciar, 1 = menu, 2 = controles
 var sel := 0
-const OPCOES := ["ARCADE", "2 JOGADORES", "CONTRA CPU", "TREINO", "OPÇÕES", "CONTROLES", "SAIR"]
+const OPCOES := ["ARCADE", "2 JOGADORES", "CONTRA CPU", "TREINO", "GALERIA", "OPÇÕES", "CONTROLES", "SAIR"]
 const DICAS := ["Enfrente 6 rivais e o misterioso Eco Sombrio.", "Dois jogadores no mesmo teclado ou com controles.",
-	"Escolha seu botton e o rival da CPU.", "Teste combos à vontade contra um boneco.", "Volume, dificuldade da CPU, tempo e rounds.",
+	"Escolha seu botton e o rival da CPU.", "Teste combos à vontade contra um boneco.", "As fichas originais de cada botton.", "Volume, dificuldade da CPU, tempo e rounds.",
 	"Veja as teclas de cada jogador.", "Fechar o jogo."]
 var sprites: Array[Sprite2D] = []
 
@@ -63,6 +63,8 @@ func _input_logic() -> void:
 						Game.modo = "cpu"; Game.goto("res://scripts/select.gd")
 					"TREINO":
 						Game.modo = "treino"; Game.goto("res://scripts/select.gd")
+					"GALERIA":
+						Game.goto("res://scripts/gallery.gd")
 					"OPÇÕES":
 						Game.goto("res://scripts/options.gd")
 					"CONTROLES":
@@ -86,18 +88,18 @@ func _draw() -> void:
 			var a := 0.55 + 0.45 * sin(t * 4.0)
 			Game.text(self, "APERTE ENTER PARA COMEÇAR", Vector2(0, 430), 34, Color(1, 1, 1, a), HORIZONTAL_ALIGNMENT_CENTER, 1280, true, 8)
 		1:
-			var r := Rect2(460, 305, 360, 330)
+			var r := Rect2(460, 296, 360, 352)
 			draw_rect(r, Color(0.05, 0.03, 0.12, 0.82))
 			draw_rect(r, Color("6fd0ff"), false, 2)
 			for i in OPCOES.size():
-				var y := 342 + i * 42
+				var y := 330 + i * 40
 				var on := i == sel
 				if on:
 					draw_rect(Rect2(476, y - 30, 328, 38), Color("6fd0ff", 0.22))
 					Game.text(self, "▶", Vector2(488, y), 24, Color("ffd36b"))
 				Game.text(self, OPCOES[i], Vector2(460, y), 28, Color("ffd36b") if on else Color(1, 1, 1, 0.85), HORIZONTAL_ALIGNMENT_CENTER, 360)
-			draw_rect(Rect2(340, 645, 600, 34), Color(0.05, 0.03, 0.12, 0.7))
-			Game.text(self, DICAS[sel], Vector2(340, 668), 18, Color(1, 1, 1, 0.85), HORIZONTAL_ALIGNMENT_CENTER, 600, false)
+			draw_rect(Rect2(340, 656, 600, 32), Color(0.05, 0.03, 0.12, 0.7))
+			Game.text(self, DICAS[sel], Vector2(340, 678), 18, Color(1, 1, 1, 0.85), HORIZONTAL_ALIGNMENT_CENTER, 600, false)
 		2:
 			_draw_controles()
 	Game.text(self, Game.VERSAO + " • protótipo", Vector2(16, 706), 16, Color(1, 1, 1, 0.4), HORIZONTAL_ALIGNMENT_LEFT, -1, false)

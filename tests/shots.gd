@@ -38,6 +38,11 @@ func _telas() -> void:
 	Game.goto("res://scripts/options.gd")
 	await espera(10)
 	await shot("t04_opcoes")
+	Game.goto("res://scripts/gallery.gd")
+	await espera(10)
+	Game._current.sel = 9
+	await espera(10)
+	await shot("t04b_galeria")
 	Game.modo = "versus"
 	Game.escolha = [1, 2]
 	Game.goto("res://scripts/select.gd")
