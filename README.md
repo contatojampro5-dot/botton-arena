@@ -3,7 +3,8 @@
 Jogo de luta 1 contra 1 com os 12 bottons, feito no **Godot 4.7** no modo **Compatibility** (roda em vídeo integrado, como o do Lenovo G40-80).
 
 ## Jogar sem o Godot (Windows)
-Na página do repositório, abra **Releases** (lado direito), baixe **BottonArena_v0.2_Windows.zip**, descompacte e dê dois cliques em **BOTTON ARENA.exe**. Se o Windows avisar "O Windows protegeu o computador", clique em **Mais informações** e depois em **Executar assim mesmo**.
+Baixe o jogo pronto por este link: https://github.com/contatojampro5-dot/botton-arena/raw/windows/BottonArena_v0.2_Windows.zip
+(ele fica no ramo **windows** do repositório). Descompacte e dê dois cliques em **BOTTON ARENA.exe**. Se o Windows avisar "O Windows protegeu o computador", clique em **Mais informações** e depois em **Executar assim mesmo**.
 
 ## Como abrir no Godot
 1. Baixe o Godot 4.7 (versão padrão, não a .NET) em https://godotengine.org/download e descompacte.
